@@ -220,7 +220,12 @@ class NameNodeRpcServer implements NamenodeProtocols {
   /** The RPC server that listens to requests from clients */
   protected final RPC.Server clientRpcServer;
   protected final InetSocketAddress clientRpcAddress;
-  
+
+  // Gateway RPC -- Begin
+  private final RPC.Server gatewayRpcServer;
+  private final InetSocketAddress gatewayRPCAddress;
+  // Gateway RPC -- End
+
   private final String minimumDataNodeVersion;
 
   public NameNodeRpcServer(Configuration conf, NameNode nn)
@@ -425,7 +430,91 @@ class NameNodeRpcServer implements NamenodeProtocols {
     if (serviceRpcServer != null) {
       serviceRpcServer.setTracer(nn.tracer);
     }
- }
+
+    // Gateway RPC -- Begin
+    InetSocketAddress gatewayRpcAddr = nn.getGatewayRpcServerAddress(conf);
+    if (gatewayRpcAddr != null) {
+      String gatewayBindHost = nn.getGatewayRpcServerBindHost(conf);
+      if (gatewayBindHost == null) {
+        gatewayBindHost = gatewayRpcAddr.getHostName();
+      }
+      LOG.info("Gateway RPC server is binding to " + gatewayBindHost + ":" +
+          gatewayRpcAddr.getPort());
+
+      int gatewayHandlerCount =
+          conf.getInt(DFSConfigKeys.DFS_NAMENODE_GATEWAY_HANDLER_COUNT_KEY,
+              DFSConfigKeys.DFS_NAMENODE_GATEWAY_HANDLER_COUNT_DEFAULT);
+      this.gatewayRpcServer = new RPC.Builder(conf)
+          .setProtocol(
+              org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolPB.class)
+          .setInstance(clientNNPbService)
+          .setBindAddress(gatewayBindHost)
+          .setPort(gatewayRpcAddr.getPort())
+          .setNumHandlers(gatewayHandlerCount)
+          .setVerbose(false)
+          .setSecretManager(namesystem.getDelegationTokenSecretManager())
+          .build();
+
+      // Add all the RPC protocols that the namenode implements
+      DFSUtil.addPBProtocol(conf, HAServiceProtocolPB.class, haPbService,
+          gatewayRpcServer);
+      DFSUtil.addPBProtocol(conf, NamenodeProtocolPB.class, NNPbService,
+          gatewayRpcServer);
+      DFSUtil.addPBProtocol(conf, DatanodeProtocolPB.class, dnProtoPbService,
+          gatewayRpcServer);
+      DFSUtil.addPBProtocol(conf, RefreshAuthorizationPolicyProtocolPB.class,
+          refreshAuthService, gatewayRpcServer);
+      DFSUtil.addPBProtocol(conf, RefreshUserMappingsProtocolPB.class,
+          refreshUserMappingService, gatewayRpcServer);
+      DFSUtil.addPBProtocol(conf, RefreshCallQueueProtocolPB.class,
+          refreshCallQueueService, gatewayRpcServer);
+      DFSUtil.addPBProtocol(conf, GenericRefreshProtocolPB.class,
+          genericRefreshService, gatewayRpcServer);
+      DFSUtil.addPBProtocol(conf, GetUserMappingsProtocolPB.class,
+          getUserMappingService, gatewayRpcServer);
+      DFSUtil.addPBProtocol(conf, TraceAdminProtocolPB.class,
+          traceAdminService, gatewayRpcServer);
+
+      // Update the address with the correct port
+      InetSocketAddress gatewayListenAddr = gatewayRpcServer.getListenerAddress();
+      gatewayRPCAddress = new InetSocketAddress(
+          gatewayRpcAddr.getHostName(), gatewayListenAddr.getPort());
+      nn.setRpcGatewayServerAddress(conf, gatewayRPCAddress);
+
+      if (serviceAuthEnabled) {
+        gatewayRpcServer.refreshServiceAcl(conf, new HDFSPolicyProvider());
+      }
+
+      // Set terse exception whose stack trace won't be logged
+      this.gatewayRpcServer.addTerseExceptions(SafeModeException.class,
+          FileNotFoundException.class,
+          HadoopIllegalArgumentException.class,
+          FileAlreadyExistsException.class,
+          InvalidPathException.class,
+          ParentNotDirectoryException.class,
+          UnresolvedLinkException.class,
+          AlreadyBeingCreatedException.class,
+          QuotaExceededException.class,
+          RecoveryInProgressException.class,
+          AccessControlException.class,
+          InvalidToken.class,
+          LeaseExpiredException.class,
+          NSQuotaExceededException.class,
+          DSQuotaExceededException.class,
+          AclException.class,
+          FSLimitException.PathComponentTooLongException.class,
+          FSLimitException.MaxDirectoryItemsExceededException.class,
+          UnresolvedPathException.class);
+
+      gatewayRpcServer.addSuppressedLoggingExceptions(StandbyException.class);
+
+      gatewayRpcServer.setTracer(nn.tracer);
+    } else {
+      gatewayRpcServer = null;
+      gatewayRPCAddress = null;
+    }
+    // Gateway RPC -- End
+  }
 
   /** Allow access to the client RPC server for testing */
   @VisibleForTesting
@@ -447,6 +536,11 @@ class NameNodeRpcServer implements NamenodeProtocols {
     if (serviceRpcServer != null) {
       serviceRpcServer.start();      
     }
+    // Gateway RPC -- Begin
+    if (gatewayRpcServer != null) {
+      gatewayRpcServer.start();
+    }
+    // Gateway RPC -- End
   }
   
   /**
@@ -457,6 +551,11 @@ class NameNodeRpcServer implements NamenodeProtocols {
     if (serviceRpcServer != null) {
       serviceRpcServer.join();      
     }
+    // Gateway RPC -- Begin
+    if (gatewayRpcServer != null) {
+      gatewayRpcServer.join();
+    }
+    // Gateway RPC -- End
   }
 
   /**
@@ -469,6 +568,11 @@ class NameNodeRpcServer implements NamenodeProtocols {
     if (serviceRpcServer != null) {
       serviceRpcServer.stop();
     }
+    // Gateway RPC -- Begin
+    if (gatewayRpcServer != null) {
+      gatewayRpcServer.stop();
+    }
+    // Gateway RPC -- End
   }
 
   InetSocketAddress getServiceRpcAddress() {
@@ -1340,6 +1444,11 @@ class NameNodeRpcServer implements NamenodeProtocols {
     if (this.serviceRpcServer != null) {
       this.serviceRpcServer.refreshServiceAcl(new Configuration(), new HDFSPolicyProvider());
     }
+    // Gateway RPC -- Begin
+    if (this.gatewayRpcServer != null) {
+      this.gatewayRpcServer.refreshServiceAcl(new Configuration(), new HDFSPolicyProvider());
+    }
+    // Gateway RPC -- End
   }
 
   @Override // RefreshAuthorizationPolicyProtocol
@@ -1365,6 +1474,11 @@ class NameNodeRpcServer implements NamenodeProtocols {
     if (this.serviceRpcServer != null) {
       serviceRpcServer.refreshCallQueue(conf);
     }
+    // Gateway RPC -- Begin
+    if (gatewayRpcServer != null) {
+      gatewayRpcServer.refreshCallQueue(conf);
+    }
+    // Gateway RPC -- End
   }
 
   @Override // GenericRefreshProtocol

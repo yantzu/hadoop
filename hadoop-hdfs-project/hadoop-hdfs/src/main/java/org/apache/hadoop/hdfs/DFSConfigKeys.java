@@ -1011,4 +1011,11 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String DFS_DISK_BALANCER_PLAN_THRESHOLD =
       "dfs.disk.balancer.plan.threshold.percent";
   public static final int DFS_DISK_BALANCER_PLAN_THRESHOLD_DEFAULT = 10;
+
+  // Gateway RPC -- Begin
+  public static final String  DFS_NAMENODE_GATEWAY_RPC_ADDRESS_KEY = "dfs.namenode.gatewayrpc-address";
+  public static final String  DFS_NAMENODE_GATEWAY_RPC_BIND_HOST_KEY = "dfs.namenode.gatewayrpc-bind-host";
+  public static final String  DFS_NAMENODE_GATEWAY_HANDLER_COUNT_KEY = "dfs.namenode.gateway.handler.count";
+  public static final int     DFS_NAMENODE_GATEWAY_HANDLER_COUNT_DEFAULT = 10;
+  // Gateway RPC -- End
 }
