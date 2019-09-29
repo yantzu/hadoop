@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_HANDLER_COUNT_DEFAULT;
@@ -43,21 +44,9 @@ import com.google.common.collect.Lists;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.crypto.CryptoProtocolVersion;
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.BatchedRemoteIterator.BatchedEntries;
 import org.apache.hadoop.hdfs.AddBlockFlag;
-import org.apache.hadoop.fs.CacheFlag;
-import org.apache.hadoop.fs.CommonConfigurationKeys;
-import org.apache.hadoop.fs.ContentSummary;
-import org.apache.hadoop.fs.CreateFlag;
-import org.apache.hadoop.fs.FileAlreadyExistsException;
-import org.apache.hadoop.fs.FsServerDefaults;
-import org.apache.hadoop.fs.InvalidPathException;
-import org.apache.hadoop.fs.Options;
-import org.apache.hadoop.fs.ParentNotDirectoryException;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.UnresolvedLinkException;
-import org.apache.hadoop.fs.XAttr;
-import org.apache.hadoop.fs.XAttrSetFlag;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -432,9 +421,12 @@ class NameNodeRpcServer implements NamenodeProtocols {
     }
 
     // Gateway RPC -- Begin
-    InetSocketAddress gatewayRpcAddr = nn.getGatewayRpcServerAddress(conf);
+    Configuration gatewayConf = new Configuration(conf);
+    String gatewayAuth = conf.get("hadoop.security.gateway.authentication", "simple");
+    gatewayConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION, gatewayAuth);
+    InetSocketAddress gatewayRpcAddr = nn.getGatewayRpcServerAddress(gatewayConf);
     if (gatewayRpcAddr != null) {
-      String gatewayBindHost = nn.getGatewayRpcServerBindHost(conf);
+      String gatewayBindHost = nn.getGatewayRpcServerBindHost(gatewayConf);
       if (gatewayBindHost == null) {
         gatewayBindHost = gatewayRpcAddr.getHostName();
       }
@@ -442,9 +434,9 @@ class NameNodeRpcServer implements NamenodeProtocols {
           gatewayRpcAddr.getPort());
 
       int gatewayHandlerCount =
-          conf.getInt(DFSConfigKeys.DFS_NAMENODE_GATEWAY_HANDLER_COUNT_KEY,
+          gatewayConf.getInt(DFSConfigKeys.DFS_NAMENODE_GATEWAY_HANDLER_COUNT_KEY,
               DFSConfigKeys.DFS_NAMENODE_GATEWAY_HANDLER_COUNT_DEFAULT);
-      this.gatewayRpcServer = new RPC.Builder(conf)
+      this.gatewayRpcServer = new RPC.Builder(gatewayConf)
           .setProtocol(
               org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolPB.class)
           .setInstance(clientNNPbService)
@@ -456,33 +448,33 @@ class NameNodeRpcServer implements NamenodeProtocols {
           .build();
 
       // Add all the RPC protocols that the namenode implements
-      DFSUtil.addPBProtocol(conf, HAServiceProtocolPB.class, haPbService,
+      DFSUtil.addPBProtocol(gatewayConf, HAServiceProtocolPB.class, haPbService,
           gatewayRpcServer);
-      DFSUtil.addPBProtocol(conf, NamenodeProtocolPB.class, NNPbService,
+      DFSUtil.addPBProtocol(gatewayConf, NamenodeProtocolPB.class, NNPbService,
           gatewayRpcServer);
-      DFSUtil.addPBProtocol(conf, DatanodeProtocolPB.class, dnProtoPbService,
+      DFSUtil.addPBProtocol(gatewayConf, DatanodeProtocolPB.class, dnProtoPbService,
           gatewayRpcServer);
-      DFSUtil.addPBProtocol(conf, RefreshAuthorizationPolicyProtocolPB.class,
+      DFSUtil.addPBProtocol(gatewayConf, RefreshAuthorizationPolicyProtocolPB.class,
           refreshAuthService, gatewayRpcServer);
-      DFSUtil.addPBProtocol(conf, RefreshUserMappingsProtocolPB.class,
+      DFSUtil.addPBProtocol(gatewayConf, RefreshUserMappingsProtocolPB.class,
           refreshUserMappingService, gatewayRpcServer);
-      DFSUtil.addPBProtocol(conf, RefreshCallQueueProtocolPB.class,
+      DFSUtil.addPBProtocol(gatewayConf, RefreshCallQueueProtocolPB.class,
           refreshCallQueueService, gatewayRpcServer);
-      DFSUtil.addPBProtocol(conf, GenericRefreshProtocolPB.class,
+      DFSUtil.addPBProtocol(gatewayConf, GenericRefreshProtocolPB.class,
           genericRefreshService, gatewayRpcServer);
-      DFSUtil.addPBProtocol(conf, GetUserMappingsProtocolPB.class,
+      DFSUtil.addPBProtocol(gatewayConf, GetUserMappingsProtocolPB.class,
           getUserMappingService, gatewayRpcServer);
-      DFSUtil.addPBProtocol(conf, TraceAdminProtocolPB.class,
+      DFSUtil.addPBProtocol(gatewayConf, TraceAdminProtocolPB.class,
           traceAdminService, gatewayRpcServer);
 
       // Update the address with the correct port
       InetSocketAddress gatewayListenAddr = gatewayRpcServer.getListenerAddress();
       gatewayRPCAddress = new InetSocketAddress(
           gatewayRpcAddr.getHostName(), gatewayListenAddr.getPort());
-      nn.setRpcGatewayServerAddress(conf, gatewayRPCAddress);
+      nn.setRpcGatewayServerAddress(gatewayConf, gatewayRPCAddress);
 
       if (serviceAuthEnabled) {
-        gatewayRpcServer.refreshServiceAcl(conf, new HDFSPolicyProvider());
+        gatewayRpcServer.refreshServiceAcl(gatewayConf, new HDFSPolicyProvider());
       }
 
       // Set terse exception whose stack trace won't be logged
