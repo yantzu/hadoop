@@ -236,6 +236,9 @@ public class BackupNode extends NameNode {
           .newReflectiveBlockingService(journalProtocolTranslator);
       DFSUtil.addPBProtocol(conf, JournalProtocolPB.class, service,
           this.clientRpcServer);
+      if (this.gatewayRpcServer != null) {
+        DFSUtil.addPBProtocol(conf, JournalProtocolPB.class, service, this.gatewayRpcServer);
+      }
     }
     
     /** 

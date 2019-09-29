@@ -222,8 +222,8 @@ class NameNodeRpcServer implements NamenodeProtocols {
   protected final InetSocketAddress clientRpcAddress;
 
   // Gateway RPC -- Begin
-  private final RPC.Server gatewayRpcServer;
-  private final InetSocketAddress gatewayRPCAddress;
+  protected final RPC.Server gatewayRpcServer;
+  protected final InetSocketAddress gatewayRPCAddress;
   // Gateway RPC -- End
 
   private final String minimumDataNodeVersion;
