@@ -59,6 +59,7 @@ import javax.security.auth.login.LoginContext;
 import javax.security.auth.login.LoginException;
 import javax.security.auth.spi.LoginModule;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.io.retry.RetryPolicies;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -78,7 +79,6 @@ import org.apache.hadoop.security.authentication.util.KerberosUtil;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.util.Shell;
-import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 
 import org.slf4j.Logger;
@@ -103,6 +103,7 @@ public class UserGroupInformation {
   private static final float TICKET_RENEW_WINDOW = 0.80f;
   private static boolean shouldRenewImmediatelyForTests = false;
   static final String HADOOP_USER_NAME = "HADOOP_USER_NAME";
+  static final String HADOOP_USER_PASSWORD = "HADOOP_USER_PASSWORD";
   static final String HADOOP_PROXY_USER = "HADOOP_PROXY_USER";
 
   /**
@@ -192,6 +193,22 @@ public class UserGroupInformation {
         if (LOG.isDebugEnabled()) {
           LOG.debug("using kerberos user:"+user);
         }
+      }
+      if (isAuthenticationMethodEnabled(AuthenticationMethod.PLAIN)) {
+        String envUser = System.getenv(HADOOP_USER_NAME);
+        if (envUser == null) {
+          envUser = System.getProperty(HADOOP_USER_NAME);
+        }
+        String envPassword = System.getenv(HADOOP_USER_PASSWORD);
+        if (envPassword == null) {
+          envPassword = System.getProperty(HADOOP_USER_PASSWORD);
+        }
+        if (StringUtils.isEmpty(envUser) || StringUtils.isEmpty(envPassword)) {
+          throw new LoginException(
+              "AUTH FAILED! Execute hinit or export HADOOP_USER_NAME and HADOOP_USER_PASSWORD");
+        }
+        user = new SaslPlainPrincipal(envUser, envPassword.toCharArray());
+        subject.getPrincipals().add(user);
       }
       //If we don't have a kerberos user and security is disabled, check
       //if user is specified in the environment or properties
@@ -541,6 +558,7 @@ public class UserGroupInformation {
       "hadoop-user-kerberos";
     private static final String KEYTAB_KERBEROS_CONFIG_NAME = 
       "hadoop-keytab-kerberos";
+    private static final String PLAIN_CONFIG_NAME = "hadoop-plain";
 
     private static final Map<String, String> BASIC_JAAS_OPTIONS =
       new HashMap<String,String>();
@@ -612,6 +630,9 @@ public class UserGroupInformation {
     private static final AppConfigurationEntry[] KEYTAB_KERBEROS_CONF =
       new AppConfigurationEntry[]{KEYTAB_KERBEROS_LOGIN, HADOOP_LOGIN};
 
+    private static final AppConfigurationEntry[] PLAIN_CONF =
+        new AppConfigurationEntry[] { HADOOP_LOGIN };
+
     @Override
     public AppConfigurationEntry[] getAppConfigurationEntry(String appName) {
       if (SIMPLE_CONFIG_NAME.equals(appName)) {
@@ -627,6 +648,8 @@ public class UserGroupInformation {
         }
         KEYTAB_KERBEROS_OPTIONS.put("principal", keytabPrincipal);
         return KEYTAB_KERBEROS_CONF;
+      } else if (PLAIN_CONFIG_NAME.equals(appName)) {
+        return PLAIN_CONF;
       }
       return null;
     }
@@ -1477,6 +1500,8 @@ public class UserGroupInformation {
     KERBEROS(AuthMethod.KERBEROS,
         HadoopConfiguration.USER_KERBEROS_CONFIG_NAME),
     TOKEN(AuthMethod.TOKEN),
+    PLAIN(AuthMethod.PLAIN,
+        HadoopConfiguration.PLAIN_CONFIG_NAME),
     CERTIFICATE(null),
     KERBEROS_SSL(null),
     PROXY(null);
