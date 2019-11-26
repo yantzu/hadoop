@@ -85,6 +85,7 @@ import org.apache.hadoop.security.SaslRpcClient;
 import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
 import org.apache.hadoop.util.ProtoUtil;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
@@ -468,7 +469,9 @@ public class Client {
       // try SASL if security is enabled or if the ugi contains tokens.
       // this causes a SIMPLE client with tokens to attempt SASL
       boolean trySasl = UserGroupInformation.isSecurityEnabled() ||
-                        (ticket != null && !ticket.getTokens().isEmpty());
+                        (ticket != null && !ticket.getTokens().isEmpty()) ||
+                        UserGroupInformation.isAuthenticationMethodEnabled(
+                            AuthenticationMethod.PLAIN);
       this.authProtocol = trySasl ? AuthProtocol.SASL : AuthProtocol.NONE;
       
       this.setName("IPC Client (" + socketFactory.hashCode() +") connection to " +
@@ -781,7 +784,9 @@ public class Client {
               if (fallbackToSimpleAuth != null) {
                 fallbackToSimpleAuth.set(false);
               }
-            } else if (UserGroupInformation.isSecurityEnabled()) {
+            } else if (UserGroupInformation.isSecurityEnabled()||
+                      UserGroupInformation.isAuthenticationMethodEnabled(
+                          AuthenticationMethod.PLAIN)) {
               if (!fallbackAllowed) {
                 throw new IOException("Server asks us to fall back to SIMPLE " +
                     "auth, but this client is configured to only allow secure " +

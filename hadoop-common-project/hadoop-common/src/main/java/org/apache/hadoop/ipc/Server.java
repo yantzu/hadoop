@@ -2461,8 +2461,9 @@ public abstract class Server {
 
     // Create the responder here
     responder = new Responder();
-    
-    if (secretManager != null || UserGroupInformation.isSecurityEnabled()) {
+
+    if (secretManager != null || UserGroupInformation.isSecurityEnabled()||
+        UserGroupInformation.isAuthenticationMethodEnabled(AuthenticationMethod.PLAIN)) {
       SaslRpcServer.init(conf);
       saslPropsResolver = SaslPropertiesResolver.getInstance(conf);
     }

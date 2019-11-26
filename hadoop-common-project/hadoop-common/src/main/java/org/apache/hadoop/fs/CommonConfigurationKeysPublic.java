@@ -481,5 +481,10 @@ public class CommonConfigurationKeysPublic {
    */
   public static final String  HADOOP_SECURITY_CREDENTIAL_PASSWORD_FILE_KEY =
       "hadoop.security.credstore.java-keystore-provider.password-file";
+
+  // Gateway RPC -- Begin
+  public static final String HADOOP_SECURITY_GATEWAY_AUTHENTICATION =
+      "hadoop.security.gateway.authentication";
+  // Gateway RPC -- End
 }
 

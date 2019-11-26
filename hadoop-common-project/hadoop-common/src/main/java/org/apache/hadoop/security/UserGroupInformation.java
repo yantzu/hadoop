@@ -212,7 +212,8 @@ public class UserGroupInformation {
       }
       //If we don't have a kerberos user and security is disabled, check
       //if user is specified in the environment or properties
-      if (!isSecurityEnabled() && (user == null)) {
+      if (!isSecurityEnabled() && !isAuthenticationMethodEnabled(AuthenticationMethod.PLAIN) &&
+          (user == null)) {
         String envUser = System.getenv(HADOOP_USER_NAME);
         if (envUser == null) {
           envUser = System.getProperty(HADOOP_USER_NAME);
@@ -425,12 +426,14 @@ public class UserGroupInformation {
    * @return true if UGI is working in a secure environment
    */
   public static boolean isSecurityEnabled() {
-    return !isAuthenticationMethodEnabled(AuthenticationMethod.SIMPLE);
+    //return !isAuthenticationMethodEnabled(AuthenticationMethod.SIMPLE);
+    //To be compatible with with legacy yarn client code, take kerberos as security enabled only
+    return isAuthenticationMethodEnabled(AuthenticationMethod.KERBEROS);
   }
-  
+
   @InterfaceAudience.Private
   @InterfaceStability.Evolving
-  private static boolean isAuthenticationMethodEnabled(AuthenticationMethod method) {
+  public static boolean isAuthenticationMethodEnabled(AuthenticationMethod method) {
     ensureInitialized();
     return (authenticationMethod == method);
   }

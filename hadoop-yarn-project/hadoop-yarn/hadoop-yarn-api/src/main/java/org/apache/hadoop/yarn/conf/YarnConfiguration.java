@@ -284,7 +284,19 @@ public class YarnConfiguration extends Configuration {
   public static final String RM_ADMIN_CLIENT_THREAD_COUNT =
     RM_PREFIX + "admin.client.thread-count";
   public static final int DEFAULT_RM_ADMIN_CLIENT_THREAD_COUNT = 1;
-  
+
+  // Gateway RPC -- Begin
+  /** The address of the RM gateway interface.*/
+  public static final String RM_GATEWAY_ADDRESS = RM_PREFIX + "gateway.address";
+  public static final int DEFAULT_RM_GATEWAY_PORT = 8034;
+  public static final String DEFAULT_RM_GATEWAY_ADDRESS = "0.0.0.0:" + DEFAULT_RM_GATEWAY_PORT;
+
+  /**Number of threads used to handle RM gateway interface.*/
+  public static final String RM_GATEWAY_CLIENT_THREAD_COUNT =
+      RM_PREFIX + "gateway.client.thread-count";
+  public static final int DEFAULT_RM_GATEWAY_CLIENT_THREAD_COUNT = 50;
+  // Gateway RPC -- End
+
   /**
    * The maximum number of application attempts.
    * It's a global setting for all application masters.

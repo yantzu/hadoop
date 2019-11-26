@@ -422,7 +422,8 @@ class NameNodeRpcServer implements NamenodeProtocols {
 
     // Gateway RPC -- Begin
     Configuration gatewayConf = new Configuration(conf);
-    String gatewayAuth = conf.get("hadoop.security.gateway.authentication", "simple");
+    String gatewayAuth =
+        conf.get(CommonConfigurationKeysPublic.HADOOP_SECURITY_GATEWAY_AUTHENTICATION, "simple");
     gatewayConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION, gatewayAuth);
     InetSocketAddress gatewayRpcAddr = nn.getGatewayRpcServerAddress(gatewayConf);
     if (gatewayRpcAddr != null) {

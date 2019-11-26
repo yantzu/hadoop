@@ -430,7 +430,8 @@ public class SecurityUtil {
    * the whole JVM.
    */
   public static <T> T doAsLoginUserOrFatal(PrivilegedAction<T> action) { 
-    if (UserGroupInformation.isSecurityEnabled()) {
+    if (UserGroupInformation.isSecurityEnabled() ||
+        UserGroupInformation.isAuthenticationMethodEnabled(AuthenticationMethod.PLAIN)) {
       UserGroupInformation ugi = null;
       try { 
         ugi = UserGroupInformation.getLoginUser();
