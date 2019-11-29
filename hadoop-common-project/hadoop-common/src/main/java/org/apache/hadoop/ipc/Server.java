@@ -113,6 +113,7 @@ import org.apache.hadoop.security.token.SecretManager;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.util.ExitUtil;
+import org.apache.hadoop.util.IpWhitelist;
 import org.apache.hadoop.util.ProtoUtil;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
@@ -138,6 +139,9 @@ public abstract class Server {
   private final boolean authorize;
   private List<AuthMethod> enabledAuthMethods;
   private RpcSaslProto negotiateResponse;
+  private RpcSaslProto simpleNegotiateResponse;
+  private IpWhitelist authenticationIpWhitelist;
+  private IpWhitelist connectionIpWhitelist;
   private ExceptionsHandler exceptionsHandler = new ExceptionsHandler();
   private Tracer tracer;
   
@@ -903,11 +907,22 @@ public abstract class Server {
       ServerSocketChannel server = (ServerSocketChannel) key.channel();
       SocketChannel channel;
       while ((channel = server.accept()) != null) {
+        InetAddress remoteInetAddress = channel.socket().getInetAddress();
+        String remoteIp =
+            remoteInetAddress == null ? "*Unknown*" : remoteInetAddress.getHostAddress();
+        if (!connectionIpWhitelist.isIn(remoteIp)) {
+          LOG.warn("Invalid access from remote ip:" + remoteIp);
+          if (channel.isOpen()) {
+            IOUtils.cleanup(null, channel);
+          }
+          connectionManager.droppedConnections.getAndIncrement();
+          continue;
+        }
 
         channel.configureBlocking(false);
         channel.socket().setTcpNoDelay(tcpNoDelay);
         channel.socket().setKeepAlive(true);
-        
+
         Reader reader = getReader();
         Connection c = connectionManager.register(channel);
         // If the connectionManager can't take it, close the connection.
@@ -1541,7 +1556,11 @@ public abstract class Server {
             throw new AccessControlException(
                 "Client already attempted negotiation");
           }
-          saslResponse = buildSaslNegotiateResponse();
+          if (authenticationIpWhitelist.isIn(getHostAddress())) {
+            saslResponse = simpleNegotiateResponse;
+          } else {
+            saslResponse = buildSaslNegotiateResponse();
+          }
           // simple-only server negotiate response is success which client
           // interprets as switch to simple
           if (saslResponse.getState() == SaslState.SUCCESS) {
@@ -1756,7 +1775,8 @@ public abstract class Server {
       switch (authProtocol) {
         case NONE: {
           // don't reply if client is simple and server is insecure
-          if (!isSimpleEnabled) {
+          // but can skip auth if client in whitelist
+          if (!isSimpleEnabled && !authenticationIpWhitelist.isIn(getHostAddress())) {
             IOException ioe = new AccessControlException(
                 "SIMPLE authentication is not enabled."
                     + "  Available:" + enabledAuthMethods);
@@ -2467,7 +2487,25 @@ public abstract class Server {
       SaslRpcServer.init(conf);
       saslPropsResolver = SaslPropertiesResolver.getInstance(conf);
     }
-    
+
+    this.simpleNegotiateResponse = buildNegotiateResponse(Arrays.asList(AuthMethod.SIMPLE));
+    String authenticationIpWhitelistFile =
+        conf.get(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION_WHITELIST_FILE);
+    if (authenticationIpWhitelistFile == null || authenticationIpWhitelistFile.isEmpty()) {
+      authenticationIpWhitelist = new IpWhitelist.NullIpWhitelist();
+    } else {
+      authenticationIpWhitelist =
+          IpWhitelist.FileConfiguredIpWhitelist.getInstance(authenticationIpWhitelistFile);
+    }
+    String connectionIpWhitelistFile =
+        conf.get(CommonConfigurationKeysPublic.HADOOP_SECURITY_CONNECTION_WHITELIST_FILE);
+    if (connectionIpWhitelistFile == null || connectionIpWhitelistFile.isEmpty()) {
+      connectionIpWhitelist = new IpWhitelist.AllIpWhitelist();
+    } else {
+      connectionIpWhitelist =
+          IpWhitelist.FileConfiguredIpWhitelist.getInstance(connectionIpWhitelistFile);
+    }
+
     this.exceptionsHandler.addTerseLoggingExceptions(StandbyException.class);
   }
   

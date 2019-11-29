@@ -204,11 +204,13 @@ public class UserGroupInformation {
           envPassword = System.getProperty(HADOOP_USER_PASSWORD);
         }
         if (StringUtils.isEmpty(envUser) || StringUtils.isEmpty(envPassword)) {
-          throw new LoginException(
-              "AUTH FAILED! Execute hinit or export HADOOP_USER_NAME and HADOOP_USER_PASSWORD");
+          LOG.warn("PLAIN auth username/password not set, "
+              + "execute hinit or export HADOOP_USER_NAME and HADOOP_USER_PASSWORD");
+          user = null;
+        } else {
+          user = new SaslPlainPrincipal(envUser, envPassword.toCharArray());
+          subject.getPrincipals().add(user);
         }
-        user = new SaslPlainPrincipal(envUser, envPassword.toCharArray());
-        subject.getPrincipals().add(user);
       }
       //If we don't have a kerberos user and security is disabled, check
       //if user is specified in the environment or properties
@@ -634,7 +636,7 @@ public class UserGroupInformation {
       new AppConfigurationEntry[]{KEYTAB_KERBEROS_LOGIN, HADOOP_LOGIN};
 
     private static final AppConfigurationEntry[] PLAIN_CONF =
-        new AppConfigurationEntry[] { HADOOP_LOGIN };
+        new AppConfigurationEntry[] {OS_SPECIFIC_LOGIN, HADOOP_LOGIN};
 
     @Override
     public AppConfigurationEntry[] getAppConfigurationEntry(String appName) {

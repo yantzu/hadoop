@@ -19,7 +19,6 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH_DEFAULT;
-import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_HANDLER_COUNT_DEFAULT;
@@ -285,6 +284,16 @@ class NameNodeRpcServer implements NamenodeProtocols {
     
     WritableRpcEngine.ensureInitialized();
 
+    Configuration serviceConf = new Configuration(conf);
+    String serviceConnectionWhiteList =
+        conf.get("dfs.namenode.service.security.connection.whitelist.file", "");
+    serviceConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_CONNECTION_WHITELIST_FILE,
+        serviceConnectionWhiteList);
+    String serviceAuthWhiteList =
+        conf.get("dfs.namenode.service.security.authentication.whitelist.file", "");
+    serviceConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION_WHITELIST_FILE,
+        serviceAuthWhiteList);
+
     InetSocketAddress serviceRpcAddr = nn.getServiceRpcServerAddress(conf);
     if (serviceRpcAddr != null) {
       String bindHost = nn.getServiceRpcServerBindHost(conf);
@@ -297,7 +306,7 @@ class NameNodeRpcServer implements NamenodeProtocols {
       int serviceHandlerCount =
         conf.getInt(DFS_NAMENODE_SERVICE_HANDLER_COUNT_KEY,
                     DFS_NAMENODE_SERVICE_HANDLER_COUNT_DEFAULT);
-      this.serviceRpcServer = new RPC.Builder(conf)
+      this.serviceRpcServer = new RPC.Builder(serviceConf)
           .setProtocol(
               org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolPB.class)
           .setInstance(clientNNPbService)
@@ -337,6 +346,17 @@ class NameNodeRpcServer implements NamenodeProtocols {
       serviceRpcServer = null;
       serviceRPCAddress = null;
     }
+
+    Configuration clientConf = new Configuration(conf);
+    String clientConnectionWhiteList =
+        conf.get("dfs.namenode.security.connection.whitelist.file", "");
+    clientConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_CONNECTION_WHITELIST_FILE,
+        clientConnectionWhiteList);
+    String clientAuthWhiteList =
+        conf.get("dfs.namenode.security.authentication.whitelist.file", "");
+    clientConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION_WHITELIST_FILE,
+        clientAuthWhiteList);
+
     InetSocketAddress rpcAddr = nn.getRpcServerAddress(conf);
     String bindHost = nn.getRpcServerBindHost(conf);
     if (bindHost == null) {
@@ -344,7 +364,7 @@ class NameNodeRpcServer implements NamenodeProtocols {
     }
     LOG.info("RPC server is binding to " + bindHost + ":" + rpcAddr.getPort());
 
-    this.clientRpcServer = new RPC.Builder(conf)
+    this.clientRpcServer = new RPC.Builder(clientConf)
         .setProtocol(
             org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolPB.class)
         .setInstance(clientNNPbService).setBindAddress(bindHost)
@@ -425,9 +445,17 @@ class NameNodeRpcServer implements NamenodeProtocols {
     String gatewayAuth =
         conf.get(CommonConfigurationKeysPublic.HADOOP_SECURITY_GATEWAY_AUTHENTICATION, "simple");
     gatewayConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION, gatewayAuth);
-    InetSocketAddress gatewayRpcAddr = nn.getGatewayRpcServerAddress(gatewayConf);
+    String gatewayConnectionWhiteList =
+        conf.get("dfs.namenode.gateway.security.connection.whitelist.file", "");
+    gatewayConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_CONNECTION_WHITELIST_FILE,
+        gatewayConnectionWhiteList);
+    String gatewayAuthWhiteList =
+        conf.get("dfs.namenode.gateway.security.authentication.whitelist.file", "");
+    gatewayConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION_WHITELIST_FILE,
+        gatewayAuthWhiteList);
+    InetSocketAddress gatewayRpcAddr = nn.getGatewayRpcServerAddress(conf);
     if (gatewayRpcAddr != null) {
-      String gatewayBindHost = nn.getGatewayRpcServerBindHost(gatewayConf);
+      String gatewayBindHost = nn.getGatewayRpcServerBindHost(conf);
       if (gatewayBindHost == null) {
         gatewayBindHost = gatewayRpcAddr.getHostName();
       }
@@ -435,7 +463,7 @@ class NameNodeRpcServer implements NamenodeProtocols {
           gatewayRpcAddr.getPort());
 
       int gatewayHandlerCount =
-          gatewayConf.getInt(DFSConfigKeys.DFS_NAMENODE_GATEWAY_HANDLER_COUNT_KEY,
+          conf.getInt(DFSConfigKeys.DFS_NAMENODE_GATEWAY_HANDLER_COUNT_KEY,
               DFSConfigKeys.DFS_NAMENODE_GATEWAY_HANDLER_COUNT_DEFAULT);
       this.gatewayRpcServer = new RPC.Builder(gatewayConf)
           .setProtocol(
@@ -449,33 +477,33 @@ class NameNodeRpcServer implements NamenodeProtocols {
           .build();
 
       // Add all the RPC protocols that the namenode implements
-      DFSUtil.addPBProtocol(gatewayConf, HAServiceProtocolPB.class, haPbService,
+      DFSUtil.addPBProtocol(conf, HAServiceProtocolPB.class, haPbService,
           gatewayRpcServer);
-      DFSUtil.addPBProtocol(gatewayConf, NamenodeProtocolPB.class, NNPbService,
+      DFSUtil.addPBProtocol(conf, NamenodeProtocolPB.class, NNPbService,
           gatewayRpcServer);
-      DFSUtil.addPBProtocol(gatewayConf, DatanodeProtocolPB.class, dnProtoPbService,
+      DFSUtil.addPBProtocol(conf, DatanodeProtocolPB.class, dnProtoPbService,
           gatewayRpcServer);
-      DFSUtil.addPBProtocol(gatewayConf, RefreshAuthorizationPolicyProtocolPB.class,
+      DFSUtil.addPBProtocol(conf, RefreshAuthorizationPolicyProtocolPB.class,
           refreshAuthService, gatewayRpcServer);
-      DFSUtil.addPBProtocol(gatewayConf, RefreshUserMappingsProtocolPB.class,
+      DFSUtil.addPBProtocol(conf, RefreshUserMappingsProtocolPB.class,
           refreshUserMappingService, gatewayRpcServer);
-      DFSUtil.addPBProtocol(gatewayConf, RefreshCallQueueProtocolPB.class,
+      DFSUtil.addPBProtocol(conf, RefreshCallQueueProtocolPB.class,
           refreshCallQueueService, gatewayRpcServer);
-      DFSUtil.addPBProtocol(gatewayConf, GenericRefreshProtocolPB.class,
+      DFSUtil.addPBProtocol(conf, GenericRefreshProtocolPB.class,
           genericRefreshService, gatewayRpcServer);
-      DFSUtil.addPBProtocol(gatewayConf, GetUserMappingsProtocolPB.class,
+      DFSUtil.addPBProtocol(conf, GetUserMappingsProtocolPB.class,
           getUserMappingService, gatewayRpcServer);
-      DFSUtil.addPBProtocol(gatewayConf, TraceAdminProtocolPB.class,
+      DFSUtil.addPBProtocol(conf, TraceAdminProtocolPB.class,
           traceAdminService, gatewayRpcServer);
 
       // Update the address with the correct port
       InetSocketAddress gatewayListenAddr = gatewayRpcServer.getListenerAddress();
       gatewayRPCAddress = new InetSocketAddress(
           gatewayRpcAddr.getHostName(), gatewayListenAddr.getPort());
-      nn.setRpcGatewayServerAddress(gatewayConf, gatewayRPCAddress);
+      nn.setRpcGatewayServerAddress(conf, gatewayRPCAddress);
 
       if (serviceAuthEnabled) {
-        gatewayRpcServer.refreshServiceAcl(gatewayConf, new HDFSPolicyProvider());
+        gatewayRpcServer.refreshServiceAcl(conf, new HDFSPolicyProvider());
       }
 
       // Set terse exception whose stack trace won't be logged

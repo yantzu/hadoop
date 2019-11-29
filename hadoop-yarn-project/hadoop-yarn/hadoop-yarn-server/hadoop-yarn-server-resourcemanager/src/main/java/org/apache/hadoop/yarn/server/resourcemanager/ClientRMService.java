@@ -220,10 +220,20 @@ public class ClientRMService extends AbstractService implements
   protected void serviceStart() throws Exception {
     Configuration conf = getConfig();
     YarnRPC rpc = YarnRPC.create(conf);
+
+    Configuration serverConf = new Configuration(conf);
+    String serverConnectionWhiteList =
+        conf.get("yarn.resourcemanager.security.connection.whitelist.file", "");
+    serverConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_CONNECTION_WHITELIST_FILE,
+        serverConnectionWhiteList);
+    String serverAuthWhiteList =
+        conf.get("yarn.resourcemanager.security.authentication.whitelist.file", "");
+    serverConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION_WHITELIST_FILE,
+        serverAuthWhiteList);
     this.server =   
       rpc.getServer(ApplicationClientProtocol.class, this,
             clientBindAddress,
-            conf, this.rmDTSecretManager,
+            serverConf, this.rmDTSecretManager,
             conf.getInt(YarnConfiguration.RM_CLIENT_THREAD_COUNT, 
                 YarnConfiguration.DEFAULT_RM_CLIENT_THREAD_COUNT));
 
@@ -233,10 +243,18 @@ public class ClientRMService extends AbstractService implements
       String gatewayAuth =
           conf.get(CommonConfigurationKeysPublic.HADOOP_SECURITY_GATEWAY_AUTHENTICATION, "simple");
       gatewayConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION, gatewayAuth);
+      String gatewayConnectionWhiteList =
+          conf.get("yarn.resourcemanager.gateway.security.connection.whitelist.file", "");
+      gatewayConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_CONNECTION_WHITELIST_FILE,
+          gatewayConnectionWhiteList);
+      String gatewayAuthWhiteList =
+          conf.get("yarn.resourcemanager.gateway.security.authentication.whitelist.file", "");
+      gatewayConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION_WHITELIST_FILE,
+          gatewayAuthWhiteList);
       this.gatewayServer = rpc.getServer(ApplicationClientProtocol.class, this,
           gatewayClientBindAddress,
           gatewayConf, this.rmDTSecretManager,
-          gatewayConf.getInt(YarnConfiguration.RM_GATEWAY_CLIENT_THREAD_COUNT,
+          conf.getInt(YarnConfiguration.RM_GATEWAY_CLIENT_THREAD_COUNT,
               YarnConfiguration.DEFAULT_RM_GATEWAY_CLIENT_THREAD_COUNT));
     }
     // Gateway RPC -- End
