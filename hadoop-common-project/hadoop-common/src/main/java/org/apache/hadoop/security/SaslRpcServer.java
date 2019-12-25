@@ -45,6 +45,7 @@ import javax.security.sasl.SaslServer;
 import javax.security.sasl.SaslServerFactory;
 
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -119,6 +120,11 @@ public class SaslRpcServer {
         serverId = (parts.length < 2) ? "" : parts[1];
         break;
       }
+      case PLAIN: {
+        protocol = StringUtils.EMPTY;
+        serverId = SaslRpcServer.SASL_DEFAULT_REALM;
+        break;
+      }
       default:
         // we should never be able to get here
         throw new AccessControlException(
@@ -147,6 +153,10 @@ public class SaslRpcServer {
                   + "hostname part: " + ugi.getUserName());
         }
         callback = new SaslGssCallbackHandler();
+        break;
+      }
+      case PLAIN: {
+        callback = new SaslPlainCallbackHandler();
         break;
       }
       default:
@@ -367,7 +377,49 @@ public class SaslRpcServer {
       }
     }
   }
-  
+
+  /** CallbackHandler for SASL Plain mechanism */
+  @InterfaceStability.Evolving
+  public static class SaslPlainCallbackHandler implements CallbackHandler {
+
+    @Override
+    public void handle(Callback[] callbacks) throws UnsupportedCallbackException {
+      NameCallback nc = null;
+      PasswordCallback pc = null;
+      AuthorizeCallback ac = null;
+      for (Callback callback : callbacks) {
+        if (callback instanceof AuthorizeCallback) {
+          ac = (AuthorizeCallback) callback;
+        } else if (callback instanceof NameCallback) {
+          nc = (NameCallback) callback;
+        } else if (callback instanceof PasswordCallback) {
+          pc = (PasswordCallback) callback;
+        } else {
+          throw new UnsupportedCallbackException(callback,
+              "Unrecognized SASL PLAIN Callback");
+        }
+      }
+      if (ac != null) {
+        String authid = ac.getAuthenticationID();
+        String authzid = ac.getAuthorizationID();
+        if (nc.getName().equals("vagrant")
+            && new String(pc.getPassword()).equals("vagrant_password")) {
+          ac.setAuthorized(true);
+        } else {
+          ac.setAuthorized(false);
+        }
+        if (ac.isAuthorized()) {
+          if (LOG.isDebugEnabled()) {
+            String username = nc.getName();
+            LOG.debug("SASL server PLAIN callback: setting "
+                + "canonicalized client ID: " + username);
+          }
+          ac.setAuthorizedID(authzid);
+        }
+      }
+    }
+  }
+
   // Sasl.createSaslServer is 100-200X slower than caching the factories!
   private static class FastSaslServerFactory implements SaslServerFactory {
     private final Map<String,List<SaslServerFactory>> factoryCache =

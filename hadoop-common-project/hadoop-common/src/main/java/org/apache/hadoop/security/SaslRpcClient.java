@@ -238,6 +238,24 @@ public class SaslRpcClient {
         }
         break;
       }
+      case PLAIN: {
+        if (ugi.getRealAuthenticationMethod().getAuthMethod() !=
+            AuthMethod.PLAIN) {
+          return null; // client isn't using kerberos
+        }
+        SaslPlainPrincipal plainPrincipal = null;
+        for (SaslPlainPrincipal user : ugi.getSubject().getPrincipals(SaslPlainPrincipal.class)) {
+          plainPrincipal = user;
+          break;
+        }
+        if (plainPrincipal == null) {
+          //TODO: add token???
+          throw new IllegalStateException("Unexpected ERROR: no SaslPlainPrincipal");
+        }
+        saslCallback =
+            new SaslClientCallbackHandler(plainPrincipal.getName(), plainPrincipal.getPassword());
+        break;
+      }
       default:
         throw new IOException("Unknown authentication method " + method);
     }
@@ -657,6 +675,11 @@ public class SaslRpcClient {
   private static class SaslClientCallbackHandler implements CallbackHandler {
     private final String userName;
     private final char[] userPassword;
+
+    public SaslClientCallbackHandler(String userName, char[] userPassword) {
+      this.userName = userName;
+      this.userPassword = userPassword;
+    }
 
     public SaslClientCallbackHandler(Token<? extends TokenIdentifier> token) {
       this.userName = SaslRpcServer.encodeIdentifier(token.getIdentifier());

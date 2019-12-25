@@ -170,6 +170,11 @@ public class ClientRMService extends AbstractService implements
   private final RecordFactory recordFactory = RecordFactoryProvider.getRecordFactory(null);
   InetSocketAddress clientBindAddress;
 
+  // Gateway RPC -- Begin
+  private Server gatewayServer;
+  InetSocketAddress gatewayClientBindAddress;
+  // Gateway RPC -- End
+
   private final ApplicationACLsManager applicationsACLsManager;
   private final QueueACLsManager queueACLsManager;
 
@@ -205,6 +210,9 @@ public class ClientRMService extends AbstractService implements
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
     clientBindAddress = getBindAddress(conf);
+    // Gateway RPC -- Begin
+    gatewayClientBindAddress = getGatewayBindAddress(conf);
+    // Gateway RPC -- End
     super.serviceInit(conf);
   }
 
@@ -212,13 +220,45 @@ public class ClientRMService extends AbstractService implements
   protected void serviceStart() throws Exception {
     Configuration conf = getConfig();
     YarnRPC rpc = YarnRPC.create(conf);
+
+    Configuration serverConf = new Configuration(conf);
+    String serverConnectionWhiteList =
+        conf.get("yarn.resourcemanager.security.connection.whitelist.file", "");
+    serverConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_CONNECTION_WHITELIST_FILE,
+        serverConnectionWhiteList);
+    String serverAuthWhiteList =
+        conf.get("yarn.resourcemanager.security.authentication.whitelist.file", "");
+    serverConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION_WHITELIST_FILE,
+        serverAuthWhiteList);
     this.server =   
       rpc.getServer(ApplicationClientProtocol.class, this,
             clientBindAddress,
-            conf, this.rmDTSecretManager,
+            serverConf, this.rmDTSecretManager,
             conf.getInt(YarnConfiguration.RM_CLIENT_THREAD_COUNT, 
                 YarnConfiguration.DEFAULT_RM_CLIENT_THREAD_COUNT));
-    
+
+    // Gateway RPC -- Begin
+    if (gatewayClientBindAddress != null) {
+      Configuration gatewayConf = new Configuration(conf);
+      String gatewayAuth =
+          conf.get(CommonConfigurationKeysPublic.HADOOP_SECURITY_GATEWAY_AUTHENTICATION, "simple");
+      gatewayConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION, gatewayAuth);
+      String gatewayConnectionWhiteList =
+          conf.get("yarn.resourcemanager.gateway.security.connection.whitelist.file", "");
+      gatewayConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_CONNECTION_WHITELIST_FILE,
+          gatewayConnectionWhiteList);
+      String gatewayAuthWhiteList =
+          conf.get("yarn.resourcemanager.gateway.security.authentication.whitelist.file", "");
+      gatewayConf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION_WHITELIST_FILE,
+          gatewayAuthWhiteList);
+      this.gatewayServer = rpc.getServer(ApplicationClientProtocol.class, this,
+          gatewayClientBindAddress,
+          gatewayConf, this.rmDTSecretManager,
+          conf.getInt(YarnConfiguration.RM_GATEWAY_CLIENT_THREAD_COUNT,
+              YarnConfiguration.DEFAULT_RM_GATEWAY_CLIENT_THREAD_COUNT));
+    }
+    // Gateway RPC -- End
+
     // Enable service authorization?
     if (conf.getBoolean(
         CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHORIZATION, 
@@ -238,6 +278,17 @@ public class ClientRMService extends AbstractService implements
                                                YarnConfiguration.RM_ADDRESS,
                                                YarnConfiguration.DEFAULT_RM_ADDRESS,
                                                server.getListenerAddress());
+
+    // Gateway RPC -- Begin
+    if (this.gatewayServer != null) {
+      this.gatewayServer.start();
+      gatewayClientBindAddress = conf.updateConnectAddr(YarnConfiguration.RM_BIND_HOST,
+                                                      YarnConfiguration.RM_GATEWAY_ADDRESS,
+                                                      YarnConfiguration.DEFAULT_RM_GATEWAY_ADDRESS,
+                                                      gatewayServer.getListenerAddress());
+    }
+    // Gateway RPC -- End
+
     super.serviceStart();
   }
 
@@ -256,6 +307,20 @@ public class ClientRMService extends AbstractService implements
             YarnConfiguration.DEFAULT_RM_ADDRESS,
             YarnConfiguration.DEFAULT_RM_PORT);
   }
+
+  // Gateway RPC -- Begin
+  InetSocketAddress getGatewayBindAddress(Configuration conf) {
+    String gatewayAddress = conf.get(YarnConfiguration.RM_GATEWAY_ADDRESS);
+    if (gatewayAddress == null || gatewayAddress.isEmpty()) {
+      return null;
+    } else {
+      return conf.getSocketAddr(YarnConfiguration.RM_BIND_HOST,
+          YarnConfiguration.RM_GATEWAY_ADDRESS,
+          YarnConfiguration.DEFAULT_RM_GATEWAY_ADDRESS,
+          YarnConfiguration.DEFAULT_RM_GATEWAY_PORT);
+    }
+  }
+  // Gateway RPC -- End
 
   @Private
   public InetSocketAddress getBindAddress() {
@@ -1060,6 +1125,12 @@ public class ClientRMService extends AbstractService implements
       PolicyProvider policyProvider) {
     this.server.refreshServiceAclWithLoadedConfiguration(configuration,
         policyProvider);
+    // Gateway RPC -- Begin
+    if (this.gatewayServer != null) {
+      this.gatewayServer.refreshServiceAclWithLoadedConfiguration(configuration,
+          policyProvider);
+    }
+    // Gateway RPC -- End
   }
 
   private boolean isAllowedDelegationTokenOp() throws IOException {

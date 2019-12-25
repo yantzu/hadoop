@@ -236,7 +236,11 @@ public class NameNode implements NameNodeStatusMXBean {
     DFS_NAMENODE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY,
     DFS_HA_FENCE_METHODS_KEY,
     DFS_HA_ZKFC_PORT_KEY,
-    DFS_HA_FENCE_METHODS_KEY
+    DFS_HA_FENCE_METHODS_KEY,
+    // Gateway RPC -- Begin
+    DFSConfigKeys.DFS_NAMENODE_GATEWAY_RPC_ADDRESS_KEY,
+    DFSConfigKeys.DFS_NAMENODE_GATEWAY_RPC_BIND_HOST_KEY
+    // Gateway RPC -- End
   };
   
   /**
@@ -1895,4 +1899,36 @@ public class NameNode implements NameNodeStatusMXBean {
       break;
     }
   }
+
+  // Gateway RPC -- Begin
+  protected void setRpcGatewayServerAddress(Configuration conf,
+      InetSocketAddress serviceRPCAddress) {
+    setGatewayAddress(conf, NetUtils.getHostPortString(serviceRPCAddress));
+  }
+
+  public static void setGatewayAddress(Configuration conf, String address) {
+    LOG.info("Setting ADDRESS {}", address);
+    conf.set(DFSConfigKeys.DFS_NAMENODE_GATEWAY_RPC_ADDRESS_KEY, address);
+  }
+
+  public static InetSocketAddress getGatewaryAddress(Configuration conf, boolean fallback) {
+    String addr = conf.get(DFSConfigKeys.DFS_NAMENODE_GATEWAY_RPC_ADDRESS_KEY);
+    if (addr == null || addr.isEmpty()) {
+      return fallback ? getAddress(conf) : null;
+    }
+    return getAddress(addr);
+  }
+
+  protected InetSocketAddress getGatewayRpcServerAddress(Configuration conf) {
+    return NameNode.getGatewaryAddress(conf, false);
+  }
+
+  protected String getGatewayRpcServerBindHost(Configuration conf) {
+    String addr = conf.getTrimmed(DFSConfigKeys.DFS_NAMENODE_GATEWAY_RPC_BIND_HOST_KEY);
+    if (addr == null || addr.isEmpty()) {
+      return null;
+    }
+    return addr;
+  }
+  // Gateway RPC -- End
 }
