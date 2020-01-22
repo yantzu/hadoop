@@ -23,6 +23,7 @@ import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.security.PrivilegedExceptionAction;
 import java.security.Security;
 import java.util.ArrayList;
@@ -37,6 +38,7 @@ import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.callback.NameCallback;
 import javax.security.auth.callback.PasswordCallback;
 import javax.security.auth.callback.UnsupportedCallbackException;
+import javax.security.sasl.AuthenticationException;
 import javax.security.sasl.AuthorizeCallback;
 import javax.security.sasl.RealmCallback;
 import javax.security.sasl.Sasl;
@@ -70,7 +72,8 @@ public class SaslRpcServer {
   public static final Map<String, String> SASL_PROPS = 
       new TreeMap<String, String>();
   private static SaslServerFactory saslFactory;
-
+  private static PasswordAuthenticationProvider passwordAuthenticationProvider;
+  
   public static enum QualityOfProtection {
     AUTHENTICATION("auth"),
     INTEGRITY("auth-int"),
@@ -156,7 +159,7 @@ public class SaslRpcServer {
         break;
       }
       case PLAIN: {
-        callback = new SaslPlainCallbackHandler();
+        callback = new SaslPlainCallbackHandler(passwordAuthenticationProvider);
         break;
       }
       default:
@@ -194,6 +197,26 @@ public class SaslRpcServer {
     // passing null so factory is populated with all possibilities.  the
     // properties passed when instantiating a server are what really matter
     saslFactory = new FastSaslServerFactory(null);
+
+    String authProvider =
+        conf.get("hadoop.security.authentication.password-authentication-provider");
+    if (authProvider != null && !authProvider.isEmpty()) {
+      try {
+        Class<PasswordAuthenticationProvider> authProviderClz =
+            (Class<PasswordAuthenticationProvider>) Class.forName(authProvider);
+        try {
+          Constructor<PasswordAuthenticationProvider> authProviderConstructor =
+              authProviderClz.getConstructor(Configuration.class);
+          passwordAuthenticationProvider = authProviderConstructor.newInstance(conf);
+        } catch (NoSuchMethodException nsme) {
+          Constructor<PasswordAuthenticationProvider> authProviderConstructor =
+              authProviderClz.getConstructor();
+          passwordAuthenticationProvider = authProviderConstructor.newInstance();
+        }
+      } catch (Exception exception) {
+        throw new IllegalArgumentException("init Password Authentication Provider failed", exception);
+      }
+    }
   }
   
   static String encodeIdentifier(byte[] identifier) {
@@ -270,6 +293,10 @@ public class SaslRpcServer {
     }
   };
 
+  public interface PasswordAuthenticationProvider {
+    void authenticate(String username, char[] password) throws AuthenticationException;
+  }
+  
   /** CallbackHandler for SASL DIGEST-MD5 mechanism */
   @InterfaceStability.Evolving
   public static class SaslDigestCallbackHandler implements CallbackHandler {
@@ -381,6 +408,11 @@ public class SaslRpcServer {
   /** CallbackHandler for SASL Plain mechanism */
   @InterfaceStability.Evolving
   public static class SaslPlainCallbackHandler implements CallbackHandler {
+    private PasswordAuthenticationProvider passwordAuthenticationProvider;
+
+    public SaslPlainCallbackHandler(PasswordAuthenticationProvider passwordAuthenticationProvider) {
+      this.passwordAuthenticationProvider = passwordAuthenticationProvider;
+    }
 
     @Override
     public void handle(Callback[] callbacks) throws UnsupportedCallbackException {
@@ -402,10 +434,11 @@ public class SaslRpcServer {
       if (ac != null) {
         String authid = ac.getAuthenticationID();
         String authzid = ac.getAuthorizationID();
-        if (nc.getName().equals("vagrant")
-            && new String(pc.getPassword()).equals("vagrant_password")) {
+        try {
+          passwordAuthenticationProvider.authenticate(nc.getName(), pc.getPassword());
           ac.setAuthorized(true);
-        } else {
+        } catch (AuthenticationException ae) {
+          LOG.warn("Auth Failed:" + ae.getMessage());
           ac.setAuthorized(false);
         }
         if (ac.isAuthorized()) {
