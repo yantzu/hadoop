@@ -109,6 +109,7 @@ import org.apache.hadoop.yarn.api.records.ReservationId;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.api.records.YarnClusterMetrics;
+import org.apache.hadoop.yarn.conf.HAUtil;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException;
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException;
@@ -310,7 +311,14 @@ public class ClientRMService extends AbstractService implements
 
   // Gateway RPC -- Begin
   InetSocketAddress getGatewayBindAddress(Configuration conf) {
-    String gatewayAddress = conf.get(YarnConfiguration.RM_GATEWAY_ADDRESS);
+    String gatewayAddress;
+    if (HAUtil.isHAEnabled(conf)) {
+      gatewayAddress =
+          conf.get(YarnConfiguration.RM_GATEWAY_ADDRESS + "." + HAUtil.getRMHAId(conf));
+    } else {
+      gatewayAddress = conf.get(YarnConfiguration.RM_GATEWAY_ADDRESS);
+    }
+
     if (gatewayAddress == null || gatewayAddress.isEmpty()) {
       return null;
     } else {

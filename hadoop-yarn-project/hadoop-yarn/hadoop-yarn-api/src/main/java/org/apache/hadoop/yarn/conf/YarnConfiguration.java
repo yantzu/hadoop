@@ -480,6 +480,7 @@ public class YarnConfiguration extends Configuration {
   private static final List<String> RM_SERVICES_ADDRESS_CONF_KEYS_HTTP =
       Collections.unmodifiableList(Arrays.asList(
           RM_ADDRESS,
+          RM_GATEWAY_ADDRESS,
           RM_SCHEDULER_ADDRESS,
           RM_ADMIN_ADDRESS,
           RM_RESOURCE_TRACKER_ADDRESS,
@@ -488,6 +489,7 @@ public class YarnConfiguration extends Configuration {
   private static final List<String> RM_SERVICES_ADDRESS_CONF_KEYS_HTTPS =
       Collections.unmodifiableList(Arrays.asList(
           RM_ADDRESS,
+          RM_GATEWAY_ADDRESS,
           RM_SCHEDULER_ADDRESS,
           RM_ADMIN_ADDRESS,
           RM_RESOURCE_TRACKER_ADDRESS,
