@@ -682,4 +682,20 @@ public class SecurityUtil {
   public static boolean isPrivilegedPort(final int port) {
     return port < 1024;
   }
+
+  public static String getEnvHadoopUserName() {
+    String envUser = System.getenv(UserGroupInformation.HADOOP_USER_NAME);
+    if (envUser == null) {
+      envUser = System.getProperty(UserGroupInformation.HADOOP_USER_NAME);
+    }
+    return envUser;
+  }
+
+  public static String getEnvHadoopUserPassword() {
+    String envPassword = System.getenv(UserGroupInformation.HADOOP_USER_PASSWORD);
+    if (envPassword == null) {
+      envPassword = System.getProperty(UserGroupInformation.HADOOP_USER_PASSWORD);
+    }
+    return envPassword;
+  }
 }

@@ -195,14 +195,8 @@ public class UserGroupInformation {
         }
       }
       if (isAuthenticationMethodEnabled(AuthenticationMethod.PLAIN)) {
-        String envUser = System.getenv(HADOOP_USER_NAME);
-        if (envUser == null) {
-          envUser = System.getProperty(HADOOP_USER_NAME);
-        }
-        String envPassword = System.getenv(HADOOP_USER_PASSWORD);
-        if (envPassword == null) {
-          envPassword = System.getProperty(HADOOP_USER_PASSWORD);
-        }
+        String envUser = SecurityUtil.getEnvHadoopUserName();
+        String envPassword = SecurityUtil.getEnvHadoopUserPassword();
         if (StringUtils.isEmpty(envUser) || StringUtils.isEmpty(envPassword)) {
           LOG.warn("PLAIN auth username/password not set, "
               + "execute hinit or export HADOOP_USER_NAME and HADOOP_USER_PASSWORD");
