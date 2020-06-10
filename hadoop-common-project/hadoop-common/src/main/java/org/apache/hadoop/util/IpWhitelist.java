@@ -74,18 +74,47 @@ public interface IpWhitelist {
     }
 
     private HashSet<String> reloadIpWhiteList() throws IOException {
+      File ipWhiteListFile = null;
+
       String hadoopConfDir = System.getenv("HADOOP_CONF_DIR");
-      if (hadoopConfDir == null || hadoopConfDir.isEmpty()) {
-        String hadoopHome = System.getenv("HADOOP_HOME");
-        if (hadoopHome == null || hadoopHome.isEmpty()) {
-          hadoopConfDir = "/etc/hadoop";
-        } else {
-          hadoopConfDir = hadoopHome + "/etc/hadoop";
+      if (hadoopConfDir != null && !hadoopConfDir.isEmpty()) {
+        ipWhiteListFile = new File(hadoopConfDir, configFileName);
+        if (!ipWhiteListFile.exists()) {
+          ipWhiteListFile = null;
         }
       }
+
+      if (ipWhiteListFile == null) {
+        String hadoopHome = System.getenv("HADOOP_HOME");
+        if (hadoopHome != null && !hadoopHome.isEmpty()) {
+          ipWhiteListFile = new File(hadoopHome + "/etc/hadoop", configFileName);
+          if (!ipWhiteListFile.exists()) {
+            ipWhiteListFile = null;
+          }
+        }
+      }
+
+      if (ipWhiteListFile == null) {
+        ipWhiteListFile = new File("/etc/hadoop", configFileName);
+        if (!ipWhiteListFile.exists()) {
+          ipWhiteListFile = null;
+        }
+      }
+
+      if (ipWhiteListFile == null) {
+        ipWhiteListFile = new File("/etc/hadoop/conf", configFileName);
+        if (!ipWhiteListFile.exists()) {
+          ipWhiteListFile = null;
+        }
+      }
+
+      if (ipWhiteListFile == null) {
+        throw new IllegalStateException("IpWhiteList file " + configFileName + " doesn't exist");
+      }
+
       HashSet<String> ipWhiteList = new HashSet<String>();
       BufferedReader fileReader =
-          new BufferedReader(new FileReader(new File(hadoopConfDir, configFileName)));
+          new BufferedReader(new FileReader(ipWhiteListFile));
       String line = fileReader.readLine();
       while (line != null) {
         String trimLine = line.trim();
