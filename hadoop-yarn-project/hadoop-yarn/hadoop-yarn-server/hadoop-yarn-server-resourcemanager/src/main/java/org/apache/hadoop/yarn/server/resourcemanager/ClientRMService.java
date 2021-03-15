@@ -298,6 +298,12 @@ public class ClientRMService extends AbstractService implements
     if (this.server != null) {
         this.server.stop();
     }
+    //Gateway RPC -- Begin
+    if (this.gatewayServer != null) {
+        this.gatewayServer.stop();
+    }
+    //Gatewary RPC -- End
+      
     super.serviceStop();
   }
 
